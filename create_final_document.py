@@ -3,7 +3,7 @@ from image_certificate_generator import ImageCertificateGenerator
 # Точные координаты для документа (шаг 10 пикселей для максимальной точности)
 PRECISE_COORDINATES = {
     'LEFT': {
-        'protocol_number': (410, 303),
+        'protocol_number': (410, 304),
         'workplace': (220, 342),
         'fullname': (220, 373),
         'job_title': (220, 420),
