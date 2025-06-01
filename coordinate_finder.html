@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система поиска координат для сертификатов</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .upload-area {
+            border: 2px dashed #3498db;
+            border-radius: 5px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+            cursor: pointer;
+        }
+        .upload-area:hover {
+            background: #e9ecef;
+        }
+        .image-container {
+            position: relative;
+            overflow: auto;
+            max-width: 100%;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+        }
+        #certificate-image {
+            display: block;
+            max-width: 100%;
+        }
+        .crosshair {
+            position: absolute;
+            pointer-events: none;
+            width: 20px;
+            height: 20px;
+            border: 1px solid red;
+            border-radius: 50%;
+            display: none;
+        }
+        .coordinates {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.05);
+        }
+        .coordinate-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: #fff;
+            border-left: 3px solid #3498db;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        .buttons-container {
+            margin-bottom: 20px;
+        }
+        .saved-coord {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            margin: 5px 0;
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .saved-coord span {
+            flex: 1;
+        }
+        .saved-coord button {
+            padding: 2px 8px;
+            margin: 0 5px;
+            font-size: 12px;
+        }
+        .file-input {
+            display: none;
+        }
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        .control-panel {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .control-panel div {
+            flex: 1;
+            margin: 0 10px;
+        }
+        .instructions {
+            background: #e8f4f8;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .instructions ol {
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        .copy-area {
+            background: #333;
+            color: #fff;
+            font-family: monospace;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Система поиска координат для сертификатов</h1>
+        
+        <div class="instructions">
+            <h3>Инструкция по использованию:</h3>
+            <ol>
+                <li>Загрузите изображение шаблона сертификата (PDF будет сконвертирован в изображение).</li>
+                <li>Кликайте по изображению, чтобы получать координаты.</li>
+                <li>Добавляйте метки с названиями элементов (например, "fullname", "workplace", и т.д.).</li>
+                <li>Включите сетку для более точного позиционирования.</li>
+                <li>Скопируйте код для вставки в программу.</li>
+            </ol>
+        </div>
+
+        <div class="upload-area" id="upload-area">
+            <p>Перетащите сюда файл шаблона сертификата или нажмите для выбора</p>
+            <input type="file" id="file-input" class="file-input" accept="image/*,.pdf">
+        </div>
+        
+        <div class="control-panel">
+            <div>
+                <label for="template-name">Название шаблона:</label>
+                <input type="text" id="template-name" placeholder="Например: OHRANA_TRUDA" style="width: 100%;">
+            </div>
+            <div>
+                <label for="section-name">Секция (LEFT/RIGHT):</label>
+                <input type="text" id="section-name" value="LEFT" style="width: 100%;">
+            </div>
+        </div>
+        
+        <div class="buttons-container">
+            <button id="toggle-grid">Показать сетку</button>
+            <button id="clear-coords">Очистить координаты</button>
+            <label style="margin-left: 10px;">
+                <input type="checkbox" id="snap-to-grid"> Привязка к сетке
+            </label>
+            <label style="margin-left: 10px;">
+                <input type="number" id="grid-size" value="20" min="5" max="100" step="5" style="width: 50px;">
+                Размер сетки
+            </label>
+        </div>
+
+        <div class="image-container" id="image-container">
+            <img id="certificate-image" alt="Шаблон сертификата">
+            <canvas id="grid-overlay" class="grid-overlay"></canvas>
+            <div class="crosshair" id="crosshair"></div>
+        </div>
+
+        <div class="coordinates">
+            <h3>Текущие координаты: <span id="current-coords">-</span></h3>
+            <div style="display: flex; margin-bottom: 10px;">
+                <input type="text" id="coord-name" placeholder="Название координаты" style="flex: 1; margin-right: 10px; padding: 8px;">
+                <button id="save-coord">Сохранить координату</button>
+            </div>
+            <div id="saved-coordinates">
+                <!-- Сохраненные координаты будут отображаться здесь -->
+            </div>
+        </div>
+
+        <h3>Код для вставки в программу:</h3>
+        <div class="copy-area" id="copy-code">
+# Код будет сгенерирован здесь
+        </div>
+        <button id="copy-button" style="margin-top: 10px;">Копировать код</button>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileInput = document.getElementById('file-input');
+            const uploadArea = document.getElementById('upload-area');
+            const imageContainer = document.getElementById('image-container');
+            const certificateImage = document.getElementById('certificate-image');
+            const currentCoords = document.getElementById('current-coords');
+            const saveCoordBtn = document.getElementById('save-coord');
+            const coordName = document.getElementById('coord-name');
+            const savedCoordinates = document.getElementById('saved-coordinates');
+            const crosshair = document.getElementById('crosshair');
+            const toggleGridBtn = document.getElementById('toggle-grid');
+            const clearCoordsBtn = document.getElementById('clear-coords');
+            const gridOverlay = document.getElementById('grid-overlay');
+            const snapToGrid = document.getElementById('snap-to-grid');
+            const gridSizeInput = document.getElementById('grid-size');
+            const copyButton = document.getElementById('copy-button');
+            const copyCode = document.getElementById('copy-code');
+            const templateName = document.getElementById('template-name');
+            const sectionName = document.getElementById('section-name');
+            
+            let gridSize = parseInt(gridSizeInput.value);
+            let gridVisible = false;
+            let coordinates = {};
+            let currentSection = "LEFT";
+            let currentTemplate = "";
+            
+            // Обработка загрузки файла
+            uploadArea.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            fileInput.addEventListener('change', handleFileSelect);
+            
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                uploadArea.style.background = '#e6f7ff';
+            });
+            
+            uploadArea.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                uploadArea.style.background = '#f8f9fa';
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                uploadArea.style.background = '#f8f9fa';
+                
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    handleFileSelect(e);
+                }
+            });
+            
+            // Получение координат
+            imageContainer.addEventListener('mousemove', (e) => {
+                const rect = certificateImage.getBoundingClientRect();
+                const x = Math.round(e.clientX - rect.left);
+                const y = Math.round(e.clientY - rect.top);
+                
+                // Обновляем положение перекрестия
+                crosshair.style.left = (x - 10) + 'px';
+                crosshair.style.top = (y - 10) + 'px';
+                crosshair.style.display = 'block';
+                
+                // Если включена привязка к сетке
+                if (snapToGrid.checked) {
+                    const snappedX = Math.round(x / gridSize) * gridSize;
+                    const snappedY = Math.round(y / gridSize) * gridSize;
+                    currentCoords.textContent = `X: ${snappedX}, Y: ${snappedY}`;
+                } else {
+                    currentCoords.textContent = `X: ${x}, Y: ${y}`;
+                }
+            });
+            
+            imageContainer.addEventListener('mouseleave', () => {
+                crosshair.style.display = 'none';
+                currentCoords.textContent = '-';
+            });
+            
+            imageContainer.addEventListener('click', (e) => {
+                const rect = certificateImage.getBoundingClientRect();
+                let x = Math.round(e.clientX - rect.left);
+                let y = Math.round(e.clientY - rect.top);
+                
+                // Привязка к сетке, если она включена
+                if (snapToGrid.checked) {
+                    x = Math.round(x / gridSize) * gridSize;
+                    y = Math.round(y / gridSize) * gridSize;
+                }
+                
+                currentCoords.textContent = `X: ${x}, Y: ${y}`;
+                coordName.focus();
+            });
+            
+            // Сохранение координат
+            saveCoordBtn.addEventListener('click', () => {
+                const name = coordName.value.trim();
+                if (!name) {
+                    alert('Введите название координаты');
+                    return;
+                }
+                
+                const coords = currentCoords.textContent;
+                if (coords === '-') {
+                    alert('Сначала выберите точку на изображении');
+                    return;
+                }
+                
+                // Извлекаем X и Y из текста
+                const match = coords.match(/X: (\d+), Y: (\d+)/);
+                if (match) {
+                    const x = parseInt(match[1]);
+                    const y = parseInt(match[2]);
+                    
+                    // Определяем текущую секцию и шаблон
+                    currentSection = sectionName.value.trim() || "LEFT";
+                    currentTemplate = templateName.value.trim() || "DEFAULT";
+                    
+                    // Создаем структуру данных, если нужно
+                    if (!coordinates[currentTemplate]) {
+                        coordinates[currentTemplate] = {};
+                    }
+                    if (!coordinates[currentTemplate][currentSection]) {
+                        coordinates[currentTemplate][currentSection] = {};
+                    }
+                    
+                    coordinates[currentTemplate][currentSection][name] = [x, y];
+                    updateSavedCoordinates();
+                    updateCodeOutput();
+                    
+                    coordName.value = '';
+                }
+            });
+            
+            // Обновление отображения сохраненных координат
+            function updateSavedCoordinates() {
+                savedCoordinates.innerHTML = '';
+                
+                // Перебираем все шаблоны
+                for (const template in coordinates) {
+                    const templateHeader = document.createElement('h4');
+                    templateHeader.textContent = `Шаблон: ${template}`;
+                    savedCoordinates.appendChild(templateHeader);
+                    
+                    // Перебираем все секции в шаблоне
+                    for (const section in coordinates[template]) {
+                        const sectionHeader = document.createElement('h5');
+                        sectionHeader.textContent = `Секция: ${section}`;
+                        savedCoordinates.appendChild(sectionHeader);
+                        
+                        // Перебираем все координаты в секции
+                        for (const name in coordinates[template][section]) {
+                            const [x, y] = coordinates[template][section][name];
+                            const coordDiv = document.createElement('div');
+                            coordDiv.className = 'saved-coord';
+                            
+                            const coordText = document.createElement('span');
+                            coordText.textContent = `${name}: (${x}, ${y})`;
+                            
+                            const deleteBtn = document.createElement('button');
+                            deleteBtn.textContent = 'Удалить';
+                            deleteBtn.addEventListener('click', () => {
+                                delete coordinates[template][section][name];
+                                
+                                // Удаляем пустые объекты
+                                if (Object.keys(coordinates[template][section]).length === 0) {
+                                    delete coordinates[template][section];
+                                }
+                                if (Object.keys(coordinates[template]).length === 0) {
+                                    delete coordinates[template];
+                                }
+                                
+                                updateSavedCoordinates();
+                                updateCodeOutput();
+                            });
+                            
+                            coordDiv.appendChild(coordText);
+                            coordDiv.appendChild(deleteBtn);
+                            savedCoordinates.appendChild(coordDiv);
+                        }
+                    }
+                }
+            }
+            
+            // Обновление кода для копирования
+            function updateCodeOutput() {
+                let code = 'COORDINATES = {\n';
+                
+                for (const template in coordinates) {
+                    code += `    # Координаты для шаблона ${template}\n`;
+                    code += `    '${template}': {\n`;
+                    
+                    for (const section in coordinates[template]) {
+                        code += `        '${section}': {\n`;
+                        
+                        for (const name in coordinates[template][section]) {
+                            const [x, y] = coordinates[template][section][name];
+                            code += `            '${name}': (${x}, ${y}),  # ${getElementDescription(name)}\n`;
+                        }
+                        
+                        code += '        },\n';
+                    }
+                    
+                    code += '    },\n';
+                }
+                
+                code += '}';
+                copyCode.textContent = code;
+            }
+            
+            // Получение описания элемента
+            function getElementDescription(name) {
+                const descriptions = {
+                    'protocol_number': 'Номер удостоверения',
+                    'workplace': 'Организация',
+                    'fullname': 'ФИО',
+                    'job_title': 'Должность',
+                    'group_text': 'Группа допуска',
+                    'cert_day': 'День выдачи',
+                    'cert_month': 'Месяц выдачи',
+                    'cert_year': 'Год выдачи',
+                    'cert_date': 'Дата проверки',
+                    'reason': 'Причина проверки',
+                    'group': 'Группа (римская)',
+                    'mark': 'Оценка',
+                    'next_date': 'Дата следующей проверки'
+                };
+                
+                return descriptions[name] || 'Пользовательское поле';
+            }
+            
+            // Копирование кода
+            copyButton.addEventListener('click', () => {
+                const textArea = document.createElement('textarea');
+                textArea.value = copyCode.textContent;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                copyButton.textContent = 'Скопировано!';
+                setTimeout(() => {
+                    copyButton.textContent = 'Копировать код';
+                }, 2000);
+            });
+            
+            // Очистка координат
+            clearCoordsBtn.addEventListener('click', () => {
+                if (confirm('Вы уверены, что хотите очистить все сохраненные координаты?')) {
+                    coordinates = {};
+                    updateSavedCoordinates();
+                    updateCodeOutput();
+                }
+            });
+            
+            // Переключение отображения сетки
+            toggleGridBtn.addEventListener('click', () => {
+                gridVisible = !gridVisible;
+                if (gridVisible) {
+                    drawGrid();
+                    toggleGridBtn.textContent = 'Скрыть сетку';
+                } else {
+                    clearGrid();
+                    toggleGridBtn.textContent = 'Показать сетку';
+                }
+            });
+            
+            // Изменение размера сетки
+            gridSizeInput.addEventListener('change', () => {
+                gridSize = parseInt(gridSizeInput.value);
+                if (gridVisible) {
+                    drawGrid();
+                }
+            });
+            
+            // Изменение секции
+            sectionName.addEventListener('change', () => {
+                currentSection = sectionName.value.trim();
+            });
+            
+            // Изменение имени шаблона
+            templateName.addEventListener('change', () => {
+                currentTemplate = templateName.value.trim();
+            });
+            
+            // Отрисовка сетки
+            function drawGrid() {
+                const ctx = gridOverlay.getContext('2d');
+                clearGrid();
+                
+                // Устанавливаем размеры canvas равными размерам изображения
+                gridOverlay.width = certificateImage.width;
+                gridOverlay.height = certificateImage.height;
+                
+                ctx.strokeStyle = 'rgba(0, 150, 255, 0.5)';
+                ctx.lineWidth = 0.5;
+                
+                // Рисуем вертикальные линии
+                for (let x = 0; x <= certificateImage.width; x += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, certificateImage.height);
+                    ctx.stroke();
+                    
+                    // Добавляем метки
+                    if (x % (gridSize * 5) === 0) {
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                        ctx.font = '10px Arial';
+                        ctx.fillText(x.toString(), x + 2, 10);
+                    }
+                }
+                
+                // Рисуем горизонтальные линии
+                for (let y = 0; y <= certificateImage.height; y += gridSize) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(certificateImage.width, y);
+                    ctx.stroke();
+                    
+                    // Добавляем метки
+                    if (y % (gridSize * 5) === 0) {
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                        ctx.font = '10px Arial';
+                        ctx.fillText(y.toString(), 2, y + 10);
+                    }
+                }
+            }
+            
+            // Очистка сетки
+            function clearGrid() {
+                const ctx = gridOverlay.getContext('2d');
+                ctx.clearRect(0, 0, gridOverlay.width, gridOverlay.height);
+            }
+            
+            // Обработка выбора файла
+            function handleFileSelect(e) {
+                const file = e.target ? e.target.files[0] : e.dataTransfer.files[0];
+                if (!file) return;
+                
+                if (file.type === 'application/pdf') {
+                    alert('PDF-файлы требуют дополнительной обработки. В этой демо-версии лучше использовать изображения (PNG, JPG).');
+                    // Здесь в будущем можно добавить конвертацию PDF в изображение
+                }
+                
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    certificateImage.src = event.target.result;
+                    certificateImage.onload = function() {
+                        if (gridVisible) {
+                            drawGrid();
+                        }
+                    };
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    </script>
+</body>
+</html> 

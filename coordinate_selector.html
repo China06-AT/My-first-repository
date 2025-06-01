@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Coordinate Selector</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.8.335/pdf.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .pdf-container {
+            position: relative;
+            margin-bottom: 20px;
+            overflow: auto;
+            border: 1px solid #ddd;
+            background-color: #eee;
+        }
+        #pdf-canvas {
+            display: block;
+            margin: 0 auto;
+            cursor: crosshair;
+            background-color: white;
+        }
+        #grid-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .controls > div {
+            flex: 1;
+            min-width: 200px;
+        }
+        .control-group {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        .control-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .coordinates-list {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .coordinate-item {
+            padding: 8px;
+            margin-bottom: 5px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .coordinate-item button {
+            background-color: #ff5555;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            padding: 2px 5px;
+            cursor: pointer;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            opacity: 0.8;
+        }
+        input, select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .code-output {
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            font-family: monospace;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        .crosshair {
+            position: absolute;
+            pointer-events: none;
+            border: 1px solid red;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+        }
+        .coordinates-display {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        #page-select {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>PDF Coordinate Selector</h1>
+            <p>Инструмент для определения координат на PDF шаблоне сертификата</p>
+        </div>
+
+        <div class="control-group">
+            <label class="control-label" for="pdf-file">Выберите PDF файл:</label>
+            <input type="file" id="pdf-file" accept=".pdf">
+        </div>
+
+        <div id="page-select" style="display: none;">
+            <label class="control-label" for="page-number">Страница:</label>
+            <select id="page-number"></select>
+        </div>
+
+        <div class="controls">
+            <div>
+                <div class="control-group">
+                    <label class="control-label" for="template-name">Название шаблона:</label>
+                    <input type="text" id="template-name" value="БЕЗОПАСТНОСТЬ_И_ОХРАНА_ТРУДА_КОРОЧКА_1">
+                </div>
+                <div class="control-group">
+                    <label class="control-label" for="section-name">Секция:</label>
+                    <select id="section-name">
+                        <option value="LEFT">LEFT</option>
+                        <option value="RIGHT">RIGHT</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label class="control-label" for="grid-size">Размер сетки:</label>
+                    <input type="number" id="grid-size" value="20" min="5" max="100">
+                </div>
+                <div class="control-group">
+                    <label><input type="checkbox" id="show-grid" checked> Показать сетку</label><br>
+                    <label><input type="checkbox" id="snap-to-grid" checked> Привязка к сетке</label>
+                </div>
+                <div class="control-group">
+                    <label class="control-label" for="zoom-level">Масштаб:</label>
+                    <select id="zoom-level">
+                        <option value="0.5">50%</option>
+                        <option value="0.75">75%</option>
+                        <option value="1" selected>100%</option>
+                        <option value="1.25">125%</option>
+                        <option value="1.5">150%</option>
+                        <option value="2">200%</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <div class="control-group">
+                    <label class="control-label" for="field-name">Название поля:</label>
+                    <select id="field-name">
+                        <option value="protocol_number">protocol_number - Номер удостоверения</option>
+                        <option value="workplace">workplace - Организация</option>
+                        <option value="fullname">fullname - ФИО</option>
+                        <option value="job_title">job_title - Должность</option>
+                        <option value="cert_day">cert_day - День выдачи</option>
+                        <option value="cert_month">cert_month - Месяц выдачи</option>
+                        <option value="cert_year">cert_year - Год выдачи</option>
+                        <option value="cert_date">cert_date - Дата проверки</option>
+                        <option value="reason">reason - Причина проверки</option>
+                        <option value="mark">mark - Оценка</option>
+                        <option value="next_date">next_date - Дата следующей проверки</option>
+                        <option value="custom">Другое (ввести свое)</option>
+                    </select>
+                    <input type="text" id="custom-field-name" placeholder="Введите название поля" style="display: none; margin-top: 8px;">
+                </div>
+                <div class="control-group">
+                    <label class="control-label">Текущие координаты:</label>
+                    <div id="current-coordinates">X: 0, Y: 0</div>
+                </div>
+                <div class="control-group">
+                    <button id="add-coordinate">Добавить координату</button>
+                    <button id="clear-coordinates" style="background-color: #f44336;">Очистить все</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="pdf-container" id="pdf-wrapper">
+            <canvas id="pdf-canvas"></canvas>
+            <canvas id="grid-canvas"></canvas>
+            <div class="crosshair" id="crosshair"></div>
+        </div>
+
+        <div class="control-group">
+            <label class="control-label">Сохраненные координаты:</label>
+            <div class="coordinates-list" id="coordinates-list">
+                <!-- Координаты будут добавляться здесь -->
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label class="control-label">Код для вставки в image_certificate_generator.py:</label>
+            <button id="copy-code">Копировать код</button>
+            <div class="code-output" id="code-output">// Здесь будет сгенерированный код</div>
+        </div>
+
+        <div class="control-group">
+            <button id="save-json">Сохранить координаты в JSON</button>
+            <button id="load-json">Загрузить координаты из JSON</button>
+            <input type="file" id="json-file" accept=".json" style="display: none;">
+        </div>
+    </div>
+
+    <div class="coordinates-display" id="coordinates-display">X: 0, Y: 0</div>
+
+    <script>
+        // Загружаем PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.8.335/pdf.worker.min.js';
+
+        // Глобальные переменные
+        let pdfDoc = null;
+        let pdfPage = null;
+        let pdfCanvas = document.getElementById('pdf-canvas');
+        let gridCanvas = document.getElementById('grid-canvas');
+        let pdfContext = pdfCanvas.getContext('2d');
+        let gridContext = gridCanvas.getContext('2d');
+        let scale = 1.0;
+        let coordinates = {};
+        let currentX = 0;
+        let currentY = 0;
+        let pdfLoaded = false;
+
+        // Элементы DOM
+        const fileInput = document.getElementById('pdf-file');
+        const zoomSelect = document.getElementById('zoom-level');
+        const fieldNameSelect = document.getElementById('field-name');
+        const customFieldName = document.getElementById('custom-field-name');
+        const templateNameInput = document.getElementById('template-name');
+        const sectionNameSelect = document.getElementById('section-name');
+        const gridSizeInput = document.getElementById('grid-size');
+        const showGridCheckbox = document.getElementById('show-grid');
+        const snapToGridCheckbox = document.getElementById('snap-to-grid');
+        const currentCoordinatesDisplay = document.getElementById('current-coordinates');
+        const coordinatesList = document.getElementById('coordinates-list');
+        const codeOutput = document.getElementById('code-output');
+        const addCoordinateButton = document.getElementById('add-coordinate');
+        const clearCoordinatesButton = document.getElementById('clear-coordinates');
+        const crosshair = document.getElementById('crosshair');
+        const coordinatesDisplay = document.getElementById('coordinates-display');
+        const copyCodeButton = document.getElementById('copy-code');
+        const saveJsonButton = document.getElementById('save-json');
+        const loadJsonButton = document.getElementById('load-json');
+        const jsonFileInput = document.getElementById('json-file');
+        const pageSelect = document.getElementById('page-number');
+        const pageSelectContainer = document.getElementById('page-select');
+
+        // Инициализация элементов управления
+        fieldNameSelect.addEventListener('change', function() {
+            customFieldName.style.display = this.value === 'custom' ? 'block' : 'none';
+        });
+
+        // Обработка загрузки PDF файла
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file && file.type === 'application/pdf') {
+                const fileReader = new FileReader();
+                
+                fileReader.onload = function() {
+                    const typedarray = new Uint8Array(this.result);
+                    loadPdfFromData(typedarray);
+                };
+                
+                fileReader.readAsArrayBuffer(file);
+            }
+        });
+
+        // Загрузка PDF из данных
+        function loadPdfFromData(data) {
+            pdfjsLib.getDocument(data).promise.then(function(pdf) {
+                pdfDoc = pdf;
+                pdfLoaded = true;
+                
+                // Обновляем селектор страниц
+                pageSelectContainer.style.display = 'block';
+                pageSelect.innerHTML = '';
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = 'Страница ' + i;
+                    pageSelect.appendChild(option);
+                }
+                
+                // Загружаем первую страницу
+                renderPage(1);
+                
+                // Обработчик изменения страницы
+                pageSelect.addEventListener('change', function() {
+                    renderPage(parseInt(this.value));
+                });
+            });
+        }
+
+        // Отрисовка страницы PDF
+        function renderPage(pageNumber) {
+            pdfDoc.getPage(pageNumber).then(function(page) {
+                pdfPage = page;
+                
+                const viewport = page.getViewport({ scale: scale });
+                pdfCanvas.height = viewport.height;
+                pdfCanvas.width = viewport.width;
+                gridCanvas.height = viewport.height;
+                gridCanvas.width = viewport.width;
+                
+                const renderContext = {
+                    canvasContext: pdfContext,
+                    viewport: viewport
+                };
+                
+                page.render(renderContext).promise.then(function() {
+                    if (showGridCheckbox.checked) {
+                        drawGrid();
+                    }
+                });
+            });
+        }
+
+        // Отрисовка сетки
+        function drawGrid() {
+            if (!pdfLoaded) return;
+            
+            gridContext.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+            
+            const gridSize = parseInt(gridSizeInput.value);
+            gridContext.strokeStyle = 'rgba(100, 100, 100, 0.3)';
+            gridContext.lineWidth = 0.5;
+            
+            // Вертикальные линии
+            for (let x = 0; x <= gridCanvas.width; x += gridSize) {
+                gridContext.beginPath();
+                gridContext.moveTo(x, 0);
+                gridContext.lineTo(x, gridCanvas.height);
+                gridContext.stroke();
+                
+                // Добавляем метки координат сверху
+                if (x % (gridSize * 5) === 0) {
+                    gridContext.fillStyle = 'rgba(60, 60, 60, 0.7)';
+                    gridContext.fillText(Math.round(x / scale), x + 2, 10);
+                }
+            }
+            
+            // Горизонтальные линии
+            for (let y = 0; y <= gridCanvas.height; y += gridSize) {
+                gridContext.beginPath();
+                gridContext.moveTo(0, y);
+                gridContext.lineTo(gridCanvas.width, y);
+                gridContext.stroke();
+                
+                // Добавляем метки координат слева
+                if (y % (gridSize * 5) === 0) {
+                    gridContext.fillStyle = 'rgba(60, 60, 60, 0.7)';
+                    gridContext.fillText(Math.round(y / scale), 2, y + 10);
+                }
+            }
+        }
+
+        // Обновление отображения при изменении настроек
+        zoomSelect.addEventListener('change', function() {
+            scale = parseFloat(this.value);
+            if (pdfPage) {
+                renderPage(parseInt(pageSelect.value));
+            }
+        });
+
+        showGridCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                drawGrid();
+            } else {
+                gridContext.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+            }
+        });
+
+        gridSizeInput.addEventListener('change', function() {
+            if (showGridCheckbox.checked) {
+                drawGrid();
+            }
+        });
+
+        // Обработка событий мыши на холсте
+        pdfCanvas.addEventListener('mousemove', function(e) {
+            const rect = pdfCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // Применяем привязку к сетке, если включена
+            let displayX = Math.round(x / scale);
+            let displayY = Math.round(y / scale);
+            
+            if (snapToGridCheckbox.checked) {
+                const gridSize = parseInt(gridSizeInput.value);
+                displayX = Math.round(displayX / gridSize) * gridSize;
+                displayY = Math.round(displayY / gridSize) * gridSize;
+            }
+            
+            currentX = displayX;
+            currentY = displayY;
+            
+            // Обновляем отображение координат
+            currentCoordinatesDisplay.textContent = `X: ${displayX}, Y: ${displayY}`;
+            coordinatesDisplay.textContent = `X: ${displayX}, Y: ${displayY}`;
+            
+            // Перемещаем перекрестие
+            crosshair.style.left = x + 'px';
+            crosshair.style.top = y + 'px';
+            crosshair.style.display = 'block';
+        });
+
+        pdfCanvas.addEventListener('mouseleave', function() {
+            crosshair.style.display = 'none';
+        });
+
+        pdfCanvas.addEventListener('mouseenter', function() {
+            crosshair.style.display = 'block';
+        });
+
+        pdfCanvas.addEventListener('click', function() {
+            // При клике выбираем текущие координаты для добавления
+            currentCoordinatesDisplay.textContent = `X: ${currentX}, Y: ${currentY}`;
+        });
+
+        // Добавление координаты
+        addCoordinateButton.addEventListener('click', function() {
+            const templateName = templateNameInput.value.trim();
+            const sectionName = sectionNameSelect.value;
+            
+            let fieldName;
+            if (fieldNameSelect.value === 'custom') {
+                fieldName = customFieldName.value.trim();
+                if (!fieldName) {
+                    alert('Введите название поля');
+                    return;
+                }
+            } else {
+                fieldName = fieldNameSelect.value;
+            }
+            
+            // Создаем структуру данных, если ее еще нет
+            if (!coordinates[templateName]) {
+                coordinates[templateName] = {};
+            }
+            if (!coordinates[templateName][sectionName]) {
+                coordinates[templateName][sectionName] = {};
+            }
+            
+            // Добавляем координату
+            coordinates[templateName][sectionName][fieldName] = [currentX, currentY];
+            
+            // Обновляем отображение и код
+            updateCoordinatesList();
+            updateCodeOutput();
+            
+            // Сбрасываем поле выбора
+            fieldNameSelect.selectedIndex = 0;
+            customFieldName.style.display = 'none';
+            customFieldName.value = '';
+        });
+
+        // Очистка всех координат
+        clearCoordinatesButton.addEventListener('click', function() {
+            if (confirm('Вы уверены, что хотите удалить все координаты?')) {
+                coordinates = {};
+                updateCoordinatesList();
+                updateCodeOutput();
+            }
+        });
+
+        // Обновление списка координат
+        function updateCoordinatesList() {
+            coordinatesList.innerHTML = '';
+            
+            for (const templateName in coordinates) {
+                for (const section in coordinates[templateName]) {
+                    for (const field in coordinates[templateName][section]) {
+                        const coords = coordinates[templateName][section][field];
+                        
+                        const item = document.createElement('div');
+                        item.className = 'coordinate-item';
+                        item.innerHTML = `
+                            <span>${templateName} > ${section} > ${field}: (${coords[0]}, ${coords[1]})</span>
+                            <button data-template="${templateName}" data-section="${section}" data-field="${field}">Удалить</button>
+                        `;
+                        
+                        item.querySelector('button').addEventListener('click', function() {
+                            const template = this.getAttribute('data-template');
+                            const section = this.getAttribute('data-section');
+                            const field = this.getAttribute('data-field');
+                            
+                            delete coordinates[template][section][field];
+                            
+                            // Если секция пуста, удаляем ее
+                            if (Object.keys(coordinates[template][section]).length === 0) {
+                                delete coordinates[template][section];
+                            }
+                            
+                            // Если шаблон пуст, удаляем его
+                            if (Object.keys(coordinates[template]).length === 0) {
+                                delete coordinates[template];
+                            }
+                            
+                            updateCoordinatesList();
+                            updateCodeOutput();
+                        });
+                        
+                        coordinatesList.appendChild(item);
+                    }
+                }
+            }
+            
+            if (coordinatesList.innerHTML === '') {
+                coordinatesList.innerHTML = '<p>Нет сохраненных координат</p>';
+            }
+        }
+
+        // Обновление выходного кода
+        function updateCodeOutput() {
+            if (Object.keys(coordinates).length === 0) {
+                codeOutput.textContent = '// Нет сохраненных координат';
+                return;
+            }
+            
+            // Изменено: Генерация полного содержимого константы COORDINATES
+            // вместо только новых координат, чтобы сохранить существующую структуру
+            let code = `    # Ключевые координаты для размещения текста (X, Y)
+    COORDINATES = {
+        # Левая часть для электробезопасности
+        'LEFT': {
+            'protocol_number': (257, 75),  # Номер удостоверения
+            'workplace': (260, 115),       # Организация 
+            'fullname': (260, 155),        # ФИО
+            'job_title': (260, 225),       # Должность
+            'group_text': (190, 300),      # Группа допуска
+            'cert_day': (273, 345),        # День выдачи
+            'cert_month': (295, 345),      # Месяц выдачи
+            'cert_year': (339, 345)        # Год выдачи
+        },
+        # Правая часть (таблица) для электробезопасности
+        'RIGHT': {
+            'cert_date': (868, 155),      # Дата проверки
+            'reason': (949, 155),         # Причина проверки
+            'group': (1065, 155),         # Группа (римская)
+            'mark': (1156, 155),          # Оценка
+            'next_date': (1246, 155)      # Дата следующей проверки
+        },
+        # Координаты для Безопасности и Охраны труда
+        'OHRANA_TRUDA': {
+            'LEFT': {
+                'protocol_number': (440, 440),  # Номер удостоверения
+                'workplace': (320, 280),       # Организация 
+                'fullname': (260, 155),        # ФИО
+                'job_title': (320,100),       # Должность
+                'cert_day': (273, 345),        # День выдачи
+                'cert_month': (295, 345),      # Месяц выдачи
+                'cert_year': (339, 345)        # Год выдачи
+            },
+            'RIGHT': {
+                'cert_date': (868, 155),      # Дата проверки
+                'reason': (949, 155),         # Причина проверки
+                'mark': (1156, 155),          # Оценка
+                'next_date': (1246, 155)      # Дата следующей проверки
+            }
+        },`;
+            
+            // Добавляем новые координаты
+            for (const templateName in coordinates) {
+                code += `\n        # Координаты для ${templateName}\n`;
+                code += `        '${templateName}': {\n`;
+                
+                for (const section in coordinates[templateName]) {
+                    code += `            '${section}': {\n`;
+                    
+                    for (const field in coordinates[templateName][section]) {
+                        const coords = coordinates[templateName][section][field];
+                        code += `                '${field}': (${coords[0]}, ${coords[1]}),  # ${getFieldDescription(field)}\n`;
+                    }
+                    
+                    // Закрываем секцию
+                    if (Object.keys(coordinates[templateName]).indexOf(section) === Object.keys(coordinates[templateName]).length - 1) {
+                        code += '            }\n';
+                    } else {
+                        code += '            },\n';
+                    }
+                }
+                
+                // Закрываем шаблон
+                if (Object.keys(coordinates).indexOf(templateName) === Object.keys(coordinates).length - 1) {
+                    code += '        }\n';
+                } else {
+                    code += '        },\n';
+                }
+            }
+            
+            code += '    }';
+            codeOutput.textContent = code;
+        }
+
+        // Функция для получения описания поля
+        function getFieldDescription(field) {
+            const descriptions = {
+                'protocol_number': 'Номер удостоверения',
+                'workplace': 'Организация',
+                'fullname': 'ФИО',
+                'job_title': 'Должность',
+                'group_text': 'Группа допуска',
+                'cert_day': 'День выдачи',
+                'cert_month': 'Месяц выдачи',
+                'cert_year': 'Год выдачи',
+                'cert_date': 'Дата проверки',
+                'reason': 'Причина проверки',
+                'group': 'Группа (римская)',
+                'mark': 'Оценка',
+                'next_date': 'Дата следующей проверки'
+            };
+            
+            return descriptions[field] || field;
+        }
+
+        // Копирование кода
+        copyCodeButton.addEventListener('click', function() {
+            const tempTextarea = document.createElement('textarea');
+            tempTextarea.value = codeOutput.textContent;
+            document.body.appendChild(tempTextarea);
+            tempTextarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextarea);
+            
+            alert('Код скопирован в буфер обмена');
+        });
+
+        // Сохранение координат в JSON
+        saveJsonButton.addEventListener('click', function() {
+            if (Object.keys(coordinates).length === 0) {
+                alert('Нет координат для сохранения');
+                return;
+            }
+            
+            const jsonString = JSON.stringify(coordinates, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'coordinates.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        // Загрузка координат из JSON
+        loadJsonButton.addEventListener('click', function() {
+            jsonFileInput.click();
+        });
+
+        jsonFileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        const loadedCoordinates = JSON.parse(event.target.result);
+                        coordinates = loadedCoordinates;
+                        updateCoordinatesList();
+                        updateCodeOutput();
+                        alert('Координаты успешно загружены');
+                    } catch (error) {
+                        alert('Ошибка при чтении файла: ' + error.message);
+                    }
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Инициализация начального состояния
+        updateCoordinatesList();
+        updateCodeOutput();
+    </script>
+</body>
+</html> 

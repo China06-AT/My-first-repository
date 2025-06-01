@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление сертификатами</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- PDF.js для отображения PDF в браузере -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding-top: 60px;
+            background-color: #f5f5f5;
+        }
+        .navbar {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .tab-content {
+            background-color: white;
+            border-radius: 0 0 0.25rem 0.25rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            padding: 20px;
+        }
+        .nav-tabs .nav-link {
+            border: none;
+            color: #6c757d;
+            font-weight: 500;
+        }
+        .nav-tabs .nav-link.active {
+            color: #2470dc;
+            border-bottom: 2px solid #2470dc;
+        }
+        #imageContainer {
+            border: 1px solid #ccc;
+            margin-top: 15px;
+            position: relative;
+            overflow: auto;
+            max-height: 600px;
+            max-width: 100%;
+            background-color: #f8f9fa;
+        }
+        #templateImage {
+            display: block;
+        }
+        #coordinatesOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        canvas {
+            max-width: 100%;
+        }
+        .coordinate-marker {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: rgba(255, 0, 0, 0.7);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .coordinate-label {
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            font-size: 12px;
+            padding: 2px 4px;
+            border-radius: 3px;
+            transform: translate(5px, -50%);
+            white-space: nowrap;
+        }
+        .form-section {
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .h-divider {
+            border-right: 1px solid #dee2e6;
+            height: 100%;
+        }
+        .history-item {
+            border-bottom: 1px solid #eee;
+            padding: 8px 0;
+        }
+        .history-item:last-child {
+            border-bottom: none;
+        }
+        .modal-xl {
+            max-width: 90%;
+        }
+        #coordinatesTable {
+            font-size: 0.9rem;
+        }
+        #coordinatesTable th, #coordinatesTable td {
+            padding: 0.5rem;
+        }
+        .btn-icon {
+            padding: 0.25rem 0.5rem;
+        }
+        .grid-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        .instructions {
+            background-color: #f8f9fa;
+            border-left: 4px solid #2470dc;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+        .alert-pdf {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Навигационная панель -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-file-earmark-pdf"></i> Управление сертификатами
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#coordinateEditor" data-bs-toggle="tab">
+                            <i class="bi bi-grid-3x3"></i> Редактор координат
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#certificateGenerator" data-bs-toggle="tab">
+                            <i class="bi bi-file-earmark-plus"></i> Генератор сертификатов
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#settings" data-bs-toggle="tab">
+                            <i class="bi bi-gear"></i> Настройки
+                        </a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#helpModal">
+                            <i class="bi bi-question-circle"></i> Помощь
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid">
+        <div class="tab-content">
+            <!-- Редактор координат -->
+            <div class="tab-pane fade show active" id="coordinateEditor">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <div class="alert alert-pdf">
+                                <h5><i class="bi bi-exclamation-triangle"></i> Инструкция по работе с PDF</h5>
+                                <p>Для работы с PDF-файлами, необходимо:</p>
+                                <ol>
+                                    <li>Выбрать шаблон сертификата из списка</li>
+                                    <li>Если PDF не отображается, нажмите "Загрузить PDF из файла" и выберите соответствующий файл вручную</li>
+                                    <li>PDF будет преобразован в изображение для разметки координат</li>
+                                </ol>
+                                <p>Файлы шаблонов должны называться: "Электробез корочка .pdf", "Безопастность и охрана труда корочка.pdf" и т.д.</p>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <label for="templateSelect" class="form-label">Шаблон сертификата</label>
+                                    <select id="templateSelect" class="form-select mb-2">
+                                        <option value="electrosafety">Электробезопасность</option>
+                                        <option value="workersafety">Безопасность и охрана труда</option>
+                                        <option value="firesafety">Пожарная безопасность</option>
+                                        <option value="industrialsafety">Промышленная безопасность</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="sectionSelect" class="form-label">Секция</label>
+                                    <select id="sectionSelect" class="form-select mb-2">
+                                        <option value="LEFT">Левая часть</option>
+                                        <option value="RIGHT">Правая часть</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="uploadPdf" class="form-label">Загрузить PDF</label>
+                                    <input type="file" id="uploadPdf" class="form-control mb-2" accept=".pdf" />
+                                </div>
+                            </div>
+                        </div>
+                        <div id="imageContainer">
+                            <div id="pdfContainer"></div>
+                            <canvas id="templateCanvas"></canvas>
+                            <canvas id="gridCanvas" class="grid-canvas"></canvas>
+                            <div id="coordinatesOverlay"></div>
+                        </div>
+                        <div class="d-flex justify-content-between mt-2">
+                            <div>
+                                <button id="toggleGridBtn" class="btn btn-outline-secondary btn-sm">
+                                    <i class="bi bi-grid-3x3"></i> Показать сетку
+                                </button>
+                                <div class="form-check form-check-inline ms-2">
+                                    <input class="form-check-input" type="checkbox" id="snapToGridCheck">
+                                    <label class="form-check-label" for="snapToGridCheck">Привязка к сетке</label>
+                                </div>
+                            </div>
+                            <div>
+                                <span id="coordinateDisplay" class="me-2 text-secondary">X: 0, Y: 0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="elementNameInput" class="form-label">Название элемента</label>
+                                    <input type="text" id="elementNameInput" class="form-control" placeholder="Например: fullname">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="fontSizeSelect" class="form-label">Размер шрифта</label>
+                                    <select id="fontSizeSelect" class="form-select">
+                                        <option value="small">Маленький</option>
+                                        <option value="normal" selected>Обычный</option>
+                                        <option value="large">Большой</option>
+                                        <option value="xlarge">Очень большой</option>
+                                        <option value="xxlarge">Огромный</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button id="saveCoordinateBtn" class="btn btn-primary mt-2">
+                                <i class="bi bi-plus-circle"></i> Добавить координату
+                            </button>
+                            <button id="clearCoordinatesBtn" class="btn btn-outline-danger mt-2 ms-2">
+                                <i class="bi bi-trash"></i> Очистить все
+                            </button>
+                            <button id="copyCoordinatesBtn" class="btn btn-outline-success mt-2 ms-2">
+                                <i class="bi bi-clipboard"></i> Код координат
+                            </button>
+                        </div>
+                        <div class="table-responsive">
+                            <table id="coordinatesTable" class="table table-striped table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Название</th>
+                                        <th>X</th>
+                                        <th>Y</th>
+                                        <th>Шрифт</th>
+                                        <th>Секция</th>
+                                        <th>Действия</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="coordinatesTableBody">
+                                    <!-- Здесь будут координаты -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="instructions mt-3">
+                            <h5>Как размечать сертификаты:</h5>
+                            <ol>
+                                <li>Выберите шаблон и секцию (левая/правая сторона)</li>
+                                <li>Кликните на изображение, чтобы выбрать координаты</li>
+                                <li>Введите название элемента и выберите размер шрифта</li>
+                                <li>Нажмите "Добавить координату"</li>
+                                <li>После завершения разметки нажмите "Код координат" для получения кода</li>
+                            </ol>
+                            <div>
+                                <strong>Доступные элементы для сертификатов:</strong>
+                                <ul class="list-inline">
+                                    <li class="list-inline-item"><span class="badge bg-secondary">fullname</span></li>
+                                    <li class="list-inline-item"><span class="badge bg-secondary">workplace</span></li>
+                                    <li class="list-inline-item"><span class="badge bg-secondary">job_title</span></li>
+                                    <li class="list-inline-item"><span class="badge bg-secondary">protocol_number</span></li>
+                                    <li class="list-inline-item"><span class="badge bg-secondary">cert_date</span></li>
+                                    <li class="list-inline-item"><span class="badge bg-secondary">next_date</span></li>
+                                    <li class="list-inline-item"><span class="badge bg-secondary">group</span> (для электробезопасности)</li>
+                                    <li class="list-inline-item"><span class="badge bg-secondary">what</span> (для электробезопасности)</li>
+                                    <li class="list-inline-item"><span class="badge bg-secondary">do</span> (для электробезопасности)</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Генератор сертификатов -->
+            <div class="tab-pane fade" id="certificateGenerator">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-section">
+                            <h4>Генерация сертификата</h4>
+                            <div class="mb-3">
+                                <label for="certTemplateSelect" class="form-label">Тип сертификата</label>
+                                <select id="certTemplateSelect" class="form-select" onchange="toggleGroupField()">
+                                    <option value="electrosafety">Электробезопасность</option>
+                                    <option value="workersafety">Безопасность и охрана труда</option>
+                                    <option value="firesafety">Пожарная безопасность</option>
+                                    <option value="industrialsafety">Промышленная безопасность</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="fullnameInput" class="form-label">ФИО</label>
+                                <input type="text" id="fullnameInput" class="form-control" placeholder="Иванов Иван Иванович">
+                            </div>
+                            <div class="mb-3">
+                                <label for="workplaceInput" class="form-label">Место работы</label>
+                                <input type="text" id="workplaceInput" class="form-control" placeholder="ООО 'Компания'">
+                            </div>
+                            <div class="mb-3">
+                                <label for="jobTitleInput" class="form-label">Должность</label>
+                                <input type="text" id="jobTitleInput" class="form-control" placeholder="Инженер">
+                            </div>
+                            <div class="mb-3" id="groupFieldContainer">
+                                <label for="groupInput" class="form-label">Группа по электробезопасности</label>
+                                <select id="groupInput" class="form-select">
+                                    <option value="2">II группа</option>
+                                    <option value="3">III группа</option>
+                                    <option value="4">IV группа</option>
+                                    <option value="5">V группа</option>
+                                </select>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="certDateInput" class="form-label">Дата выдачи</label>
+                                    <input type="date" id="certDateInput" class="form-control">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="nextDateInput" class="form-label">Дата следующей проверки</label>
+                                    <input type="date" id="nextDateInput" class="form-control">
+                                </div>
+                            </div>
+                            <button id="generateCertBtn" class="btn btn-primary">
+                                <i class="bi bi-file-earmark-plus"></i> Сгенерировать сертификат
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-section">
+                            <h4>История генерации</h4>
+                            <div id="historyList" class="mt-3">
+                                <!-- История генерации будет здесь -->
+                                <div class="text-center text-muted">История пуста</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Настройки -->
+            <div class="tab-pane fade" id="settings">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-section">
+                            <h4>Настройки шаблонов</h4>
+                            <div class="mb-3">
+                                <label class="form-label">Пути к шаблонам</label>
+                                <div id="templatePaths" class="list-group">
+                                    <div class="list-group-item">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span>Электробезопасность:</span>
+                                            <small class="text-muted">Электробез корочка .pdf</small>
+                                        </div>
+                                    </div>
+                                    <div class="list-group-item">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span>Безопасность и охрана труда:</span>
+                                            <small class="text-muted">Безопастность и охрана труда корочка.pdf</small>
+                                        </div>
+                                    </div>
+                                    <div class="list-group-item">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span>Пожарная безопасность:</span>
+                                            <small class="text-muted">Пожарная безопастность корочка.pdf</small>
+                                        </div>
+                                    </div>
+                                    <div class="list-group-item">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <span>Промышленная безопасность:</span>
+                                            <small class="text-muted">Промбез корочка.pdf</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-section">
+                            <h4>Дополнительные настройки</h4>
+                            <div class="mb-3">
+                                <label for="gridSizeInput" class="form-label">Размер сетки</label>
+                                <input type="number" id="gridSizeInput" class="form-control" value="20" min="5" max="100">
+                            </div>
+                            <div class="mb-3">
+                                <label for="gridOpacityInput" class="form-label">Прозрачность сетки (%)</label>
+                                <input type="range" id="gridOpacityInput" class="form-range" min="10" max="100" value="50">
+                            </div>
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" id="showCoordinatesCheck" class="form-check-input" checked>
+                                <label for="showCoordinatesCheck" class="form-check-label">Показывать сохраненные координаты</label>
+                            </div>
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" id="saveLocallyCheck" class="form-check-input" checked>
+                                <label for="saveLocallyCheck" class="form-check-label">Сохранять координаты в браузере</label>
+                            </div>
+                            <button id="exportCoordinatesBtn" class="btn btn-outline-primary">
+                                <i class="bi bi-download"></i> Экспорт координат
+                            </button>
+                            <button id="importCoordinatesBtn" class="btn btn-outline-secondary ms-2">
+                                <i class="bi bi-upload"></i> Импорт координат
+                            </button>
+                            <input type="file" id="importCoordinatesFile" accept=".json" style="display: none;">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для кода координат -->
+    <div class="modal fade" id="coordinatesModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Код координат для вставки</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <p>Скопируйте этот код и вставьте его в файл image_certificate_generator.py в блок COORDINATES.</p>
+                    </div>
+                    <pre id="coordinatesCode" class="bg-light p-3" style="max-height: 500px; overflow-y: auto;"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    <button type="button" class="btn btn-primary" id="copyCodeBtn">
+                        <i class="bi bi-clipboard"></i> Копировать код
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно справки -->
+    <div class="modal fade" id="helpModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Справка</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <h4>Работа с редактором координат</h4>
+                    <p>Этот инструмент позволяет визуально размечать элементы на шаблонах сертификатов и получать их координаты.</p>
+                    
+                    <h5>Шаги для разметки сертификата:</h5>
+                    <ol>
+                        <li>Выберите тип шаблона сертификата в выпадающем списке</li>
+                        <li>Выберите секцию (LEFT - левая часть, RIGHT - правая часть)</li>
+                        <li>Если PDF не загружается автоматически, используйте кнопку "Загрузить PDF" и выберите нужный файл</li>
+                        <li>Нажмите кнопку "Показать сетку" для отображения координатной сетки</li>
+                        <li>Кликните по месту на изображении, где должен располагаться элемент</li>
+                        <li>Введите название элемента (например: fullname, workplace) и выберите размер шрифта</li>
+                        <li>Нажмите "Добавить координату" для сохранения</li>
+                        <li>Повторите для всех нужных элементов</li>
+                        <li>Нажмите "Код координат" для получения кода для вставки в программу</li>
+                    </ol>
+
+                    <h5>Доступные элементы для сертификатов:</h5>
+                    <ul>
+                        <li><strong>fullname</strong> - Полное имя получателя сертификата</li>
+                        <li><strong>workplace</strong> - Место работы</li>
+                        <li><strong>job_title</strong> - Должность</li>
+                        <li><strong>protocol_number</strong> - Номер протокола</li>
+                        <li><strong>cert_date</strong> - Дата выдачи сертификата</li>
+                        <li><strong>next_date</strong> - Дата следующей проверки</li>
+                        <li><strong>group</strong> - Группа (только для электробезопасности)</li>
+                        <li><strong>what</strong> - Дополнительный текст для групп 4 и 5 (только для электробезопасности)</li>
+                        <li><strong>do</strong> - Дополнительный текст для групп 4 и 5 (только для электробезопасности)</li>
+                    </ul>
+                    
+                    <h4>Использование PDF файлов</h4>
+                    <p>Для работы с PDF-файлами используется библиотека PDF.js, которая преобразует PDF в изображение для 
+                    разметки. Название PDF файлов должно соответствовать тем, что указаны в настройках шаблонов.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Основной JavaScript файл -->
+    <script src="certificate_manager.js"></script>
+</body>
+</html> 

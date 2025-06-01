@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Редактор координат для сертификатов</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+            border-radius: 8px 8px 0 0;
+        }
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+            font-size: 16px;
+        }
+        .tab button:hover {
+            background-color: #ddd;
+        }
+        .tab button.active {
+            background-color: #3498db;
+            color: white;
+        }
+        .tabcontent {
+            display: none;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+        }
+        .frame {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .coordinate-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .side {
+            border: 1px solid #eee;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .side h3 {
+            margin-top: 0;
+            color: #3498db;
+        }
+        .coord-row {
+            display: grid;
+            grid-template-columns: 120px 60px 20px 60px 20px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .coord-row label {
+            font-weight: bold;
+        }
+        input[type="number"] {
+            width: 50px;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        .button-row {
+            margin: 15px 0;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .test-data {
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        input[type="text"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .setting-row {
+            display: grid;
+            grid-template-columns: 200px 60px;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 4px;
+            display: none;
+            z-index: 1000;
+        }
+        .error {
+            background-color: #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Редактор координат для сертификатов</h1>
+        
+        <div class="tab">
+            <button class="tablinks active" onclick="openTab(event, 'coordinates')">Координаты</button>
+            <button class="tablinks" onclick="openTab(event, 'preview')">Предпросмотр</button>
+        </div>
+        
+        <div id="coordinates" class="tabcontent" style="display: block;">
+            <div class="frame">
+                <h2>Тип сертификата</h2>
+                <div>
+                    <input type="radio" id="ohrana_truda" name="cert_type" value="OHRANA_TRUDA" checked onchange="updateCoordinateView()">
+                    <label for="ohrana_truda">Безопасность и охрана труда</label>
+                    <input type="radio" id="electro" name="cert_type" value="ELECTRO" onchange="updateCoordinateView()">
+                    <label for="electro">Электробезопасность</label>
+                </div>
+            </div>
+            
+            <div class="frame">
+                <h2>Координаты полей</h2>
+                <div class="coordinate-grid">
+                    <div class="side">
+                        <h3>Левая сторона</h3>
+                        <div id="left-coords"></div>
+                    </div>
+                    <div class="side">
+                        <h3>Правая сторона</h3>
+                        <div id="right-coords"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="button-row">
+                <button onclick="saveCoordinates()">Сохранить координаты</button>
+                <button onclick="resetCoordinates()">Сбросить к стандартным</button>
+                <button onclick="saveToJson()">Сохранить в JSON</button>
+                <button onclick="loadFromJson()">Загрузить из JSON</button>
+            </div>
+        </div>
+        
+        <div id="preview" class="tabcontent">
+            <div class="frame">
+                <h2>Тестовые данные для генерации</h2>
+                <div class="test-data">
+                    <label for="fullname">ФИО:</label>
+                    <input type="text" id="fullname" value="Тестовый Пользователь">
+                </div>
+                <div class="test-data">
+                    <label for="workplace">Организация:</label>
+                    <input type="text" id="workplace" value="ООО Тест">
+                </div>
+                <div class="test-data">
+                    <label for="job_title">Должность:</label>
+                    <input type="text" id="job_title" value="Инженер">
+                </div>
+            </div>
+            
+            <div class="button-row">
+                <button onclick="generateCertificate(true)">Сгенерировать тестовый сертификат</button>
+                <button onclick="generateCertificate(false)">Сгенерировать без сетки</button>
+            </div>
+            
+            <div class="frame">
+                <h2>Настройки координатной сетки</h2>
+                <div class="setting-row">
+                    <label for="grid_spacing">Шаг основной сетки:</label>
+                    <input type="number" id="grid_spacing" value="10" min="5" max="50">
+                </div>
+                <div class="setting-row">
+                    <label for="minor_grid">Шаг дополнительной сетки:</label>
+                    <input type="number" id="minor_grid" value="2" min="0" max="10">
+                </div>
+                <button onclick="createCoordinateGrid()">Создать координатную сетку</button>
+            </div>
+            
+            <div class="frame">
+                <h2>Результат</h2>
+                <div id="result">
+                    <p>Здесь будет отображаться результат генерации сертификата.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="notification" class="notification"></div>
+    
+    <script>
+        // Данные координат по умолчанию
+        const defaultCoordinates = {
+            'OHRANA_TRUDA': {
+                'LEFT': {
+                    'protocol_number': [257, 75],
+                    'workplace': [260, 115],
+                    'fullname': [260, 155],
+                    'job_title': [260, 225],
+                    'cert_day': [273, 345],
+                    'cert_month': [295, 345],
+                    'cert_year': [339, 345]
+                },
+                'RIGHT': {
+                    'cert_date': [868, 155],
+                    'reason': [949, 155],
+                    'mark': [1156, 155],
+                    'next_date': [1246, 155]
+                }
+            },
+            'LEFT': {
+                'protocol_number': [257, 75],
+                'workplace': [260, 115],
+                'fullname': [260, 155],
+                'job_title': [260, 225],
+                'group_text': [190, 300],
+                'cert_day': [273, 345],
+                'cert_month': [295, 345],
+                'cert_year': [339, 345]
+            },
+            'RIGHT': {
+                'cert_date': [868, 155],
+                'reason': [949, 155],
+                'group': [1065, 155],
+                'mark': [1156, 155],
+                'next_date': [1246, 155]
+            }
+        };
+        
+        // Текущие координаты (копия исходных)
+        let coordinates = JSON.parse(JSON.stringify(defaultCoordinates));
+        
+        // Переменные для хранения инфо о последнем сгенерированном файле
+        let lastGeneratedFile = null;
+        
+        // Функция для открытия вкладки
+        function openTab(evt, tabName) {
+            let tabcontent = document.getElementsByClassName("tabcontent");
+            for (let i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            
+            let tablinks = document.getElementsByClassName("tablinks");
+            for (let i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+        
+        // Обновление отображения координат
+        function updateCoordinateView() {
+            const certType = document.querySelector('input[name="cert_type"]:checked').value;
+            
+            // Определяем, какие координаты использовать
+            let leftCoords, rightCoords;
+            if (certType === "OHRANA_TRUDA") {
+                leftCoords = coordinates['OHRANA_TRUDA']['LEFT'];
+                rightCoords = coordinates['OHRANA_TRUDA']['RIGHT'];
+            } else {
+                leftCoords = coordinates['LEFT'];
+                rightCoords = coordinates['RIGHT'];
+            }
+            
+            // Очистка контейнеров
+            document.getElementById('left-coords').innerHTML = '';
+            document.getElementById('right-coords').innerHTML = '';
+            
+            // Заполнение левой стороны
+            for (const [key, [x, y]] of Object.entries(leftCoords)) {
+                const coordRow = document.createElement('div');
+                coordRow.className = 'coord-row';
+                coordRow.innerHTML = `
+                    <label for="left-${key}">${key}:</label>
+                    <input type="number" id="left-${key}-x" value="${x}">
+                    <span>X</span>
+                    <input type="number" id="left-${key}-y" value="${y}">
+                    <span>Y</span>
+                `;
+                document.getElementById('left-coords').appendChild(coordRow);
+            }
+            
+            // Заполнение правой стороны
+            for (const [key, [x, y]] of Object.entries(rightCoords)) {
+                const coordRow = document.createElement('div');
+                coordRow.className = 'coord-row';
+                coordRow.innerHTML = `
+                    <label for="right-${key}">${key}:</label>
+                    <input type="number" id="right-${key}-x" value="${x}">
+                    <span>X</span>
+                    <input type="number" id="right-${key}-y" value="${y}">
+                    <span>Y</span>
+                `;
+                document.getElementById('right-coords').appendChild(coordRow);
+            }
+        }
+        
+        // Сохранение координат
+        function saveCoordinates() {
+            const certType = document.querySelector('input[name="cert_type"]:checked').value;
+            
+            try {
+                // Обновляем координаты в зависимости от типа сертификата
+                if (certType === "OHRANA_TRUDA") {
+                    for (const key of Object.keys(coordinates['OHRANA_TRUDA']['LEFT'])) {
+                        const xInput = document.getElementById(`left-${key}-x`);
+                        const yInput = document.getElementById(`left-${key}-y`);
+                        
+                        if (xInput && yInput) {
+                            const x = parseInt(xInput.value);
+                            const y = parseInt(yInput.value);
+                            
+                            if (isNaN(x) || isNaN(y)) {
+                                showNotification(`Некорректное значение для ${key}`, true);
+                                return;
+                            }
+                            
+                            coordinates['OHRANA_TRUDA']['LEFT'][key] = [x, y];
+                        }
+                    }
+                    
+                    for (const key of Object.keys(coordinates['OHRANA_TRUDA']['RIGHT'])) {
+                        const xInput = document.getElementById(`right-${key}-x`);
+                        const yInput = document.getElementById(`right-${key}-y`);
+                        
+                        if (xInput && yInput) {
+                            const x = parseInt(xInput.value);
+                            const y = parseInt(yInput.value);
+                            
+                            if (isNaN(x) || isNaN(y)) {
+                                showNotification(`Некорректное значение для ${key}`, true);
+                                return;
+                            }
+                            
+                            coordinates['OHRANA_TRUDA']['RIGHT'][key] = [x, y];
+                        }
+                    }
+                } else {
+                    for (const key of Object.keys(coordinates['LEFT'])) {
+                        const xInput = document.getElementById(`left-${key}-x`);
+                        const yInput = document.getElementById(`left-${key}-y`);
+                        
+                        if (xInput && yInput) {
+                            const x = parseInt(xInput.value);
+                            const y = parseInt(yInput.value);
+                            
+                            if (isNaN(x) || isNaN(y)) {
+                                showNotification(`Некорректное значение для ${key}`, true);
+                                return;
+                            }
+                            
+                            coordinates['LEFT'][key] = [x, y];
+                        }
+                    }
+                    
+                    for (const key of Object.keys(coordinates['RIGHT'])) {
+                        const xInput = document.getElementById(`right-${key}-x`);
+                        const yInput = document.getElementById(`right-${key}-y`);
+                        
+                        if (xInput && yInput) {
+                            const x = parseInt(xInput.value);
+                            const y = parseInt(yInput.value);
+                            
+                            if (isNaN(x) || isNaN(y)) {
+                                showNotification(`Некорректное значение для ${key}`, true);
+                                return;
+                            }
+                            
+                            coordinates['RIGHT'][key] = [x, y];
+                        }
+                    }
+                }
+                
+                showNotification("Координаты успешно сохранены");
+            } catch (error) {
+                showNotification(`Ошибка при сохранении координат: ${error.message}`, true);
+            }
+        }
+        
+        // Сброс координат к значениям по умолчанию
+        function resetCoordinates() {
+            coordinates = JSON.parse(JSON.stringify(defaultCoordinates));
+            updateCoordinateView();
+            showNotification("Координаты сброшены к стандартным значениям");
+        }
+        
+        // Сохранение координат в JSON файл
+        function saveToJson() {
+            const dataStr = JSON.stringify(coordinates, null, 2);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            
+            const exportFileName = 'coordinates_' + new Date().toISOString().slice(0,10) + '.json';
+            
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileName);
+            linkElement.click();
+            
+            showNotification(`Координаты сохранены в ${exportFileName}`);
+        }
+        
+        // Загрузка координат из JSON файла
+        function loadFromJson() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            
+            input.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const loadedData = JSON.parse(e.target.result);
+                        
+                        // Проверка структуры загруженных данных
+                        if (!loadedData.OHRANA_TRUDA || !loadedData.LEFT || !loadedData.RIGHT) {
+                            throw new Error("Некорректный формат файла координат");
+                        }
+                        
+                        coordinates = loadedData;
+                        updateCoordinateView();
+                        showNotification(`Координаты загружены из ${file.name}`);
+                    } catch (error) {
+                        showNotification(`Ошибка при загрузке координат: ${error.message}`, true);
+                    }
+                };
+                reader.readAsText(file);
+            });
+            
+            input.click();
+        }
+        
+        // Функция для генерации сертификата (заглушка для браузерной версии)
+        function generateCertificate(withGrid) {
+            // Сначала сохраняем координаты
+            saveCoordinates();
+            
+            // Получаем тестовые данные
+            const fullname = document.getElementById('fullname').value;
+            const workplace = document.getElementById('workplace').value;
+            const jobTitle = document.getElementById('job_title').value;
+            
+            if (!fullname || !workplace || !jobTitle) {
+                showNotification("Заполните все тестовые данные", true);
+                return;
+            }
+            
+            // Определяем тип сертификата
+            const certType = document.querySelector('input[name="cert_type"]:checked').value;
+            
+            // В браузерной версии вместо реальной генерации показываем информацию для копирования
+            const resultDiv = document.getElementById('result');
+            
+            let html = `<h3>Данные координат для генерации сертификата</h3>
+                       <p><strong>Тип сертификата:</strong> ${certType === 'OHRANA_TRUDA' ? 'Безопасность и Охрана труда' : 'Электробезопасность'}</p>
+                       <p><strong>ФИО:</strong> ${fullname}</p>
+                       <p><strong>Организация:</strong> ${workplace}</p>
+                       <p><strong>Должность:</strong> ${jobTitle}</p>
+                       <p><strong>Координатная сетка:</strong> ${withGrid ? 'Да' : 'Нет'}</p>
+                       <h3>Координаты для копирования:</h3>
+                       <textarea style="width: 100%; height: 200px; font-family: monospace;">${JSON.stringify(coordinates, null, 2)}</textarea>
+                       <p><em>Скопируйте эти данные и используйте их в вашем Python-скрипте для генерации сертификатов.</em></p>`;
+            
+            resultDiv.innerHTML = html;
+            showNotification("Данные для генерации подготовлены");
+            
+            // Прокрутка к результату
+            resultDiv.scrollIntoView({behavior: 'smooth'});
+        }
+        
+        // Функция для создания координатной сетки (заглушка для браузерной версии)
+        function createCoordinateGrid() {
+            const gridSpacing = parseInt(document.getElementById('grid_spacing').value) || 10;
+            const minorGrid = parseInt(document.getElementById('minor_grid').value) || 2;
+            
+            // Определяем тип сертификата
+            const certType = document.querySelector('input[name="cert_type"]:checked').value;
+            const templateName = certType === "OHRANA_TRUDA" ? 'ohrana_truda' : 'korotchka';
+            
+            // В браузерной версии показываем информацию с инструкциями
+            const resultDiv = document.getElementById('result');
+            
+            let html = `<h3>Параметры для создания координатной сетки</h3>
+                       <p><strong>Шаблон:</strong> ${templateName}</p>
+                       <p><strong>Шаг основной сетки:</strong> ${gridSpacing}</p>
+                       <p><strong>Шаг дополнительной сетки:</strong> ${minorGrid}</p>
+                       <p>Для создания координатной сетки используйте Python-скрипт со следующими параметрами:</p>
+                       <pre style="background: #f5f5f5; padding: 10px; border-radius: 5px;">
+from image_certificate_generator import ImageCertificateGenerator
+
+generator = ImageCertificateGenerator()
+generator.create_detailed_grid(
+    template_name='${templateName}',
+    grid_spacing=${gridSpacing},
+    minor_grid_step=${minorGrid},
+    grid_opacity=80,
+    show_labels=True
+)
+</pre>`;
+            
+            resultDiv.innerHTML = html;
+            showNotification("Параметры для создания сетки подготовлены");
+            
+            // Прокрутка к результату
+            resultDiv.scrollIntoView({behavior: 'smooth'});
+        }
+        
+        // Функция для отображения уведомлений
+        function showNotification(message, isError = false) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.style.display = 'block';
+            
+            if (isError) {
+                notification.classList.add('error');
+            } else {
+                notification.classList.remove('error');
+            }
+            
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            updateCoordinateView();
+        });
+    </script>
+</body>
+</html> 
